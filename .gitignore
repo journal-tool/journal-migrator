@@ -1,0 +1,10 @@
+# Distribution / packaging
+bin/
+tmp/
+vendor/
+
+# Log caches
+**/*.log
+
+# MacOS files
+**/.DS_Store

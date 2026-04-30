@@ -1,0 +1,101 @@
+name: Continuous Integration
+
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+
+env:
+  GO_VERSION: "1.26"
+
+
+jobs:
+
+  lint:
+    name: "Lint"
+    needs: []
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: "Fetch the repository"
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: "Set up Golang"
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: "Install Golang dependencies"
+        run: go mod download
+      - name: "Check format"
+        run: make check
+
+  test-unit:
+    name: "Unit tests"
+    needs: [lint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: "Fetch the repository"
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: "Set up Golang"
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: "Install Golang dependencies"
+        run: go mod download
+      - name: "Run tests"
+        run: make test-unit
+
+  test-integration:
+    name: "Integration tests (${{ matrix.file }})"
+    needs: [lint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { file: "mysql-8.0.yaml", port: "3306", type: "mysql" }
+          - { file: "mysql-8.4.yaml", port: "3306", type: "mysql" }
+          - { file: "postgres-16.yaml", port: "5432", type: "postgres" }
+          - { file: "postgres-18.yaml", port: "5432", type: "postgres" }
+    env:
+      COMPOSE_FILE: ${{ matrix.file }}
+      DATABASE_PORT: ${{ matrix.port }}
+      DATABASE_TYPE: ${{ matrix.type }}
+    steps:
+      - name: "Fetch the repository"
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: "Set up Golang"
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: "Set up Compose"
+        uses: docker/setup-compose-action@v2
+      - name: "Install Golang dependencies"
+        run: go mod download
+      - name: "Start services"
+        run: make services-up
+      - name: "Run tests"
+        run: make test-integration
+      - name: "Stop services"
+        run: make services-down
